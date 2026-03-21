@@ -1,0 +1,33 @@
+# Environment
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.DS_Store
+
+# Java build
+fhir-service/target/
+*.class
+*.jar
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Test data (generated)
+test-data/*.pdf
+
+# Node
+node_modules/
+
+# Docker
+docker-compose.override.yml
