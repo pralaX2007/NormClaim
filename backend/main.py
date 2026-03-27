@@ -11,6 +11,7 @@ import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from supabase import create_client, Client
 
 # Load environment variables from .env file
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
@@ -57,16 +58,29 @@ app.include_router(fhir_router)
 app.include_router(reconcile_router)
 
 
+# ── Supabase Client Setup ────────────────────────────────────────────────
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.error("Supabase credentials are not set. Please configure SUPABASE_URL and SUPABASE_KEY in your .env file.")
+    raise EnvironmentError("Supabase credentials missing.")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+logger.info("✓  Supabase client initialized successfully")
+
 # ── Health check ──────────────────────────────────────────────────────────
 @app.get("/health", tags=["System"])
 async def health():
     """Health check endpoint."""
     gemini_configured = bool(os.environ.get("GEMINI_API_KEY"))
+    supabase_configured = bool(SUPABASE_URL and SUPABASE_KEY)
     return {
         "status": "ok",
         "service": "normclaim-backend",
         "version": "1.0.0",
         "gemini_api_key_configured": gemini_configured,
+        "supabase_configured": supabase_configured,
     }
 
 

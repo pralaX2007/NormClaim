@@ -4,7 +4,7 @@ All I/O schemas for the NormClaim API.
 """
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 class PatientInfo(BaseModel):
@@ -66,3 +66,30 @@ class ReconciliationReport(BaseModel):
     total_extracted_codes: int
     estimated_claim_delta_inr: float
     confidence: float
+
+
+class SpacyPreprocessResult(BaseModel):
+    expanded_text: str
+    section_map: Dict[str, str]  # sentence_index → section_label
+    negated_spans: List[str]  # confirmed negated entity texts
+
+
+class CorrectionItem(BaseModel):
+    field: str  # e.g., "diagnoses[0].icd10_code"
+    original_value: str
+    corrected_value: str
+    correction_reason: str
+
+
+class HumanReview(BaseModel):
+    document_id: str
+    reviewer_notes: str
+    corrections: List[CorrectionItem]
+    reviewed_at: str
+
+
+class FeedbackItem(BaseModel):
+    document_id: str
+    was_extraction_correct: bool
+    correction_type: str  # "wrong_code" | "missed_diagnosis" | "false_positive" | "negation_error" | "hinglish_error" | "brand_name_error"
+    details: str
