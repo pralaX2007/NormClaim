@@ -44,7 +44,11 @@ def reconcile(extraction: ExtractionResult) -> ReconciliationReport:
     - Identify matched, missed, and extra codes
     - Estimate ₹ claim delta for missed diagnoses
     """
-    extracted_codes = {d.icd10_code.upper() for d in extraction.diagnoses}
+    extracted_codes = {
+        d.icd10_code.upper()
+        for d in extraction.diagnoses
+        if not d.negated
+    }
     billed_codes = {c.upper() for c in extraction.billed_codes}
 
     matched_codes = extracted_codes & billed_codes

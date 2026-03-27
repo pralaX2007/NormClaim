@@ -11,6 +11,7 @@ import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from supabase import create_client, Client
 
 # Load environment variables from .env file
@@ -51,23 +52,29 @@ from routers.documents import router as documents_router
 from routers.extract import router as extract_router
 from routers.fhir import router as fhir_router
 from routers.reconcile import router as reconcile_router
+from routers.review import router as review_router
+from routers.feedback import router as feedback_router
+from routers.validate import router as validate_router
 
 app.include_router(documents_router)
 app.include_router(extract_router)
 app.include_router(fhir_router)
 app.include_router(reconcile_router)
+app.include_router(review_router)
+app.include_router(feedback_router)
+app.include_router(validate_router)
 
 
 # ── Supabase Client Setup ────────────────────────────────────────────────
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
+supabase: Optional[Client] = None
 if not SUPABASE_URL or not SUPABASE_KEY:
-    logger.error("Supabase credentials are not set. Please configure SUPABASE_URL and SUPABASE_KEY in your .env file.")
-    raise EnvironmentError("Supabase credentials missing.")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-logger.info("✓  Supabase client initialized successfully")
+    logger.warning("Supabase credentials not set. Running with in-memory fallback for uploads/listing.")
+else:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    logger.info("✓  Supabase client initialized successfully")
 
 # ── Health check ──────────────────────────────────────────────────────────
 @app.get("/health", tags=["System"])

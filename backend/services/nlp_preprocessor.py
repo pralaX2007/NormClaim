@@ -4,24 +4,38 @@ Handles deterministic text preprocessing using spaCy and medspaCy.
 """
 
 import spacy
-from medspacy.context import ConTextComponent
 import json
 import re
+import os
+import importlib
 from typing import List, Dict
-from backend.data.abbrev_map import abbrev_map
+
+_medspacy_context = None
+try:
+    _medspacy_context = importlib.import_module("medspacy.context")
+except Exception:
+    _medspacy_context = None
+
+MEDSPACY_AVAILABLE = _medspacy_context is not None
 
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
-context = ConTextComponent()
-nlp.add_pipe(context, last=True)
+if MEDSPACY_AVAILABLE:
+    context = _medspacy_context.ConTextComponent()
+    nlp.add_pipe(context, last=True)
 
 # Load abbreviation map
-ABBREV_MAP = {k: v for k, v in sorted(abbrev_map.items(), key=lambda x: -len(x[0]))}
+_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+with open(os.path.join(_DATA_DIR, "abbrev_map.json"), "r", encoding="utf-8") as f:
+    _abbrev_map = json.load(f)
+
+# Longest keys first to avoid partial replacements like replacing c/o before k/c/o.
+ABBREV_MAP = {k: v for k, v in sorted(_abbrev_map.items(), key=lambda x: -len(x[0]))}
 
 def expand_abbreviations(text: str) -> str:
     """Expand abbreviations in the input text."""
     for abbr, full_form in ABBREV_MAP.items():
-        pattern = re.compile(r"\\b" + re.escape(abbr) + r"\\b", re.IGNORECASE)
+        pattern = re.compile(r"\b" + re.escape(abbr) + r"\b", re.IGNORECASE)
         text = pattern.sub(full_form, text)
     return text
 
@@ -48,14 +62,18 @@ def detect_sections(doc) -> Dict[str, str]:
 
 def detect_negated_spans(doc) -> List[str]:
     """Detect negated spans using medspaCy ConText and regex patterns."""
-    negated_spans = [ent.text for ent in doc.ents if ent._.is_negated]
+    negated_spans = []
+    if MEDSPACY_AVAILABLE:
+        negated_spans.extend([
+            ent.text for ent in doc.ents if hasattr(ent._, "is_negated") and ent._.is_negated
+        ])
     regex_patterns = [
-        r"no\\s+h/o\\s+(\\w+)",
-        r"not\\s+a\\s+k/c/o\\s+(\\w+)",
-        r"ruled\\s+out\\s+(\\w+)",
-        r"(\\w+)\\s+not\\s+present",
-        r"no\\s+evidence\\s+of\\s+(\\w+)",
-        r"(\\w+)\\s+excluded"
+        r"no\s+h/o\s+(\w+)",
+        r"not\s+a\s+k/c/o\s+(\w+)",
+        r"ruled\s+out\s+(\w+)",
+        r"(\w+)\s+not\s+present",
+        r"no\s+evidence\s+of\s+(\w+)",
+        r"(\w+)\s+excluded"
     ]
     for pattern in regex_patterns:
         matches = re.findall(pattern, doc.text, re.IGNORECASE)
@@ -64,7 +82,7 @@ def detect_negated_spans(doc) -> List[str]:
 
 def detect_script(text: str) -> str:
     """Detect the script of the text (Roman, Devanagari, or Mixed)."""
-    devanagari_range = re.compile(r"[\\u0900-\\u097F]")
+    devanagari_range = re.compile(r"[\u0900-\u097F]")
     has_devanagari = bool(devanagari_range.search(text))
     has_latin = bool(re.search(r"[a-zA-Z]", text))
     if has_devanagari and has_latin:

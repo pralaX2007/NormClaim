@@ -4,15 +4,22 @@ Handles clinical and financial entity extraction using spaCy and Gemini.
 """
 
 import spacy
-from medspacy.context import ConTextComponent
 import json
+import importlib
 
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
 
-# Add ConText for negation detection
-context = ConTextComponent()
-nlp.add_pipe(context, last=True)
+# Add ConText for negation detection if medspaCy is available.
+_medspacy_context = None
+try:
+    _medspacy_context = importlib.import_module("medspacy.context")
+except Exception:
+    _medspacy_context = None
+
+if _medspacy_context is not None:
+    context = _medspacy_context.ConTextComponent()
+    nlp.add_pipe(context, last=True)
 
 # Placeholder for abbreviation map
 ABBREV_MAP = {
@@ -51,7 +58,7 @@ def process_text(raw_text):
 
         # Collect negated spans
         for ent in sent.ents:
-            if ent._.is_negated:
+            if hasattr(ent._, "is_negated") and ent._.is_negated:
                 negated_spans.append(ent.text)
 
     return {

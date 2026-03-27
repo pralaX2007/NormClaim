@@ -3,12 +3,12 @@ NormClaim — Pydantic Data Models
 All I/O schemas for the NormClaim API.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 
 
 class PatientInfo(BaseModel):
-    name: str
+    name: Optional[str] = None
     age: Optional[int] = None
     sex: Optional[str] = None
     abha_id: Optional[str] = None
@@ -24,8 +24,13 @@ class EncounterInfo(BaseModel):
 class Diagnosis(BaseModel):
     text: str
     icd10_code: str
-    is_primary: bool
+    icd10_system: str = "http://hl7.org/fhir/sid/icd-10"
+    icd10_display: Optional[str] = None
+    is_primary: bool = False
     confidence: float  # 0.0 – 1.0
+    negated: bool = False
+    uncertainty: str = "confirmed"
+    section: str = "diagnosis"
 
 
 class Procedure(BaseModel):
@@ -34,8 +39,12 @@ class Procedure(BaseModel):
 
 
 class Medication(BaseModel):
-    name: str
+    name: Optional[str] = None
+    brand_name: Optional[str] = None
+    generic_name: Optional[str] = None
     dose: Optional[str] = None
+    route: Optional[str] = None
+    frequency: Optional[str] = None
     duration: Optional[str] = None
 
 
@@ -48,6 +57,10 @@ class ExtractionResult(BaseModel):
     medications: List[Medication]
     billed_codes: List[str]  # ICD-10 codes found on the original bill
     raw_text_preview: str    # first 500 chars of extracted text
+    detected_script: Optional[str] = None
+    section_map: Dict[str, str] = Field(default_factory=dict)
+    negated_spans: List[str] = Field(default_factory=list)
+    low_confidence_flags: List[str] = Field(default_factory=list)
 
 
 class ReconciliationItem(BaseModel):

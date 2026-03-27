@@ -5,6 +5,7 @@ Proxies extraction data to the Java HAPI FHIR service to generate FHIR R4 Bundle
 
 from fastapi import APIRouter, HTTPException
 from services.fhir_client import generate_fhir_bundle, check_fhir_health
+from services.fhir_mapper import build_fhir_bundle_local
 from routers.extract import EXTRACTIONS
 
 router = APIRouter(prefix="/api/fhir", tags=["FHIR"])
@@ -22,15 +23,20 @@ async def create_fhir_bundle(document_id: str):
             detail="Extract first: POST /api/extract/{id}"
         )
 
-    # Check if FHIR service is up
-    fhir_healthy = await check_fhir_health()
-    if not fhir_healthy:
-        raise HTTPException(
-            status_code=503,
-            detail="FHIR service is not available. Start fhir-service on port 8001."
-        )
+    extraction = EXTRACTIONS[document_id]
 
-    bundle = await generate_fhir_bundle(EXTRACTIONS[document_id])
+    # Prefer Java HAPI service when available, otherwise use local fallback.
+    fhir_healthy = await check_fhir_health()
+    if fhir_healthy:
+        try:
+            bundle = await generate_fhir_bundle(extraction)
+        except Exception:
+            bundle = build_fhir_bundle_local(extraction)
+            bundle.setdefault("meta", {})["tag"] = [{"code": "local-fallback"}]
+    else:
+        bundle = build_fhir_bundle_local(extraction)
+        bundle.setdefault("meta", {})["tag"] = [{"code": "local-fallback"}]
+
     FHIR_BUNDLES[document_id] = bundle
     return bundle
 
