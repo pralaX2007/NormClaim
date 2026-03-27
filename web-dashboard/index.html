@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NormClaim — Revenue Recovery Dashboard</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <style>
+    /* Page-specific overrides */
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--sp-6);
+      align-items: start;
+      margin-bottom: var(--sp-10);
+    }
+    .upload-card { position: relative; }
+    .side-stats { display: flex; flex-direction: column; gap: var(--sp-4); }
+    .pipeline-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-top: var(--sp-4);
+    }
+    .pipe-step {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--sp-4);
+      padding: var(--sp-4) 0;
+      position: relative;
+    }
+    .pipe-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 15px; top: 44px;
+      width: 1px; height: calc(100% - 12px);
+      background: var(--border-subtle);
+    }
+    .pipe-num {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      color: var(--teal-bright);
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+    }
+    .pipe-step.active .pipe-num {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: #fff;
+      box-shadow: var(--shadow-teal);
+    }
+    .pipe-text { padding-top: 4px; }
+    .pipe-label { font-size: 0.85rem; font-weight: 500; color: var(--text-primary); }
+    .pipe-sub   { font-size: 0.78rem; color: var(--text-muted); }
+
+    /* Uploading progress overlay */
+    .upload-progress {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: var(--bg-surface);
+      border-radius: var(--r-xl);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--sp-5);
+      padding: var(--sp-10);
+    }
+    .upload-progress.visible { display: flex; }
+    .progress-label { font-size: 0.875rem; color: var(--text-secondary); }
+    .progress-percent { font-family: var(--font-mono); color: var(--teal-bright); }
+
+    /* Documents section */
+    .doc-list { display: flex; flex-direction: column; gap: var(--sp-3); }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--sp-5);
+    }
+    .section-header h2 { margin: 0; }
+
+    /* Claim bar on doc item */
+    .doc-claim-bar {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+      flex-shrink: 0;
+    }
+    .doc-claim-amount {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--gold);
+    }
+
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation ─────────────────────────────────────────────── -->
+<nav class="nav">
+  <a href="index.html" class="nav-logo">
+    <div class="nav-logo-mark">N</div>
+    <span class="nav-logo-text">Norm<span>Claim</span></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link active">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Dashboard
+    </a>
+    <a href="review.html" class="nav-link">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Review
+    </a>
+    <a href="reconcile.html" class="nav-link">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+      Reconcile
+    </a>
+  </div>
+  <div class="nav-spacer"></div>
+  <span class="nav-badge">ABDM v6.5</span>
+</nav>
+
+<!-- ── Main Content ────────────────────────────────────────────── -->
+<main class="page-wrapper">
+
+  <!-- Page header -->
+  <div class="page-header animate-in">
+    <div class="eyebrow">AB-PMJAY Revenue Intelligence</div>
+    <h1>Discharge Summary Analysis</h1>
+    <p>Upload hospital discharge PDFs. AI extracts every diagnosis and shows exactly how much revenue your billing team missed.</p>
+  </div>
+
+  <!-- Upload + side panel -->
+  <div class="hero-grid">
+
+    <!-- Upload card -->
+    <div class="animate-in-delay-1">
+      <div class="upload-card card" style="padding:0; overflow:hidden;">
+        <div id="uploadZone" class="upload-zone" onclick="document.getElementById('fileInput').click()">
+          <div class="upload-icon">
+            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+          </div>
+          <div class="upload-title">Drop discharge summary here</div>
+          <p class="upload-sub">Drag &amp; drop or <strong>browse files</strong> · PDF only · Max 10 MB</p>
+          <br>
+          <span class="badge badge-teal">Supports digital &amp; scanned PDFs</span>
+        </div>
+
+        <!-- Progress overlay -->
+        <div class="upload-progress" id="uploadProgress">
+          <div class="spinner" style="width:40px;height:40px;border-width:3px;"></div>
+          <div style="text-align:center;">
+            <div id="progressLabel" class="progress-label">Uploading document…</div>
+            <div id="progressPercent" class="progress-percent">0%</div>
+          </div>
+          <div class="w-full" style="max-width:280px;">
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+            </div>
+          </div>
+          <p class="text-muted" style="font-size:0.78rem; text-align:center; max-width:260px;">
+            Gemini 1.5 Flash is reading all diagnoses including secondary &amp; comorbidities
+          </p>
+        </div>
+
+        <input type="file" id="fileInput" accept=".pdf" class="sr-only" onchange="handleFileSelect(event)" />
+      </div>
+
+      <!-- Pipeline steps -->
+      <div class="card mt-4" style="padding: var(--sp-5)">
+        <h4 class="mb-3" style="color:var(--text-muted);">Processing Pipeline</h4>
+        <div class="pipeline-steps">
+          <div class="pipe-step" id="step1">
+            <div class="pipe-num">1</div>
+            <div class="pipe-text">
+              <div class="pipe-label">PDF Ingestion</div>
+              <div class="pipe-sub">pdfplumber + Gemini Vision</div>
+            </div>
+          </div>
+          <div class="pipe-step" id="step2">
+            <div class="pipe-num">2</div>
+            <div class="pipe-text">
+              <div class="pipe-label">AI Extraction</div>
+              <div class="pipe-sub">Diagnoses, ICD-10, medications</div>
+            </div>
+          </div>
+          <div class="pipe-step" id="step3">
+            <div class="pipe-num">3</div>
+            <div class="pipe-text">
+              <div class="pipe-label">FHIR Bundle</div>
+              <div class="pipe-sub">HAPI FHIR R4 · ABDM-compliant</div>
+            </div>
+          </div>
+          <div class="pipe-step" id="step4">
+            <div class="pipe-num">4</div>
+            <div class="pipe-text">
+              <div class="pipe-label">Claim Reconciliation</div>
+              <div class="pipe-sub">₹ delta vs billed codes</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side stats -->
+    <div class="side-stats animate-in-delay-2">
+      <div class="stats-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat-card teal">
+          <div class="stat-label">Documents</div>
+          <div class="stat-value teal" id="statDocs">—</div>
+          <div class="stat-sub">Processed</div>
+        </div>
+        <div class="stat-card gold">
+          <div class="stat-label">Revenue Recovered</div>
+          <div class="stat-value gold" id="statRevenue">—</div>
+          <div class="stat-sub">Across all docs</div>
+        </div>
+        <div class="stat-card red">
+          <div class="stat-label">Missed Diagnoses</div>
+          <div class="stat-value red" id="statMissed">—</div>
+          <div class="stat-sub">Not billed</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-label">Avg Confidence</div>
+          <div class="stat-value green" id="statConf">—</div>
+          <div class="stat-sub">AI extraction</div>
+        </div>
+      </div>
+
+      <!-- Info card -->
+      <div class="card" style="background: var(--teal-faint); border-color: var(--border-active);">
+        <h4 class="mb-3 text-teal">About NormClaim</h4>
+        <p style="font-size:0.85rem; line-height:1.7;">
+          Indian SME hospitals lose <strong style="color:var(--gold);">₹12,000+ per discharge</strong> due to missed secondary diagnoses.
+          NormClaim uses Gemini 1.5 Flash to extract every diagnosis, generates ABDM-compliant FHIR R4 bundles,
+          and shows exactly what's left on the table.
+        </p>
+        <div class="flex gap-2 mt-4" style="flex-wrap:wrap;">
+          <span class="badge badge-teal">ICD-10 validated</span>
+          <span class="badge badge-muted">FHIR R4</span>
+          <span class="badge badge-muted">ABDM v6.5</span>
+          <span class="badge badge-gold">AB-PMJAY</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Documents list -->
+  <div class="animate-in-delay-3">
+    <div class="section-header">
+      <h2>Documents</h2>
+      <div class="flex gap-2 items-center">
+        <span id="docCount" class="badge badge-muted">0 documents</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadDocuments()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <div id="docList" class="doc-list">
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <h3>No documents yet</h3>
+        <p>Upload a discharge summary PDF to get started</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+  const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:8000'
+    : 'http://localhost:8000';
+
+  // ── Drag & drop ────────────────────────────────────────────────
+  const zone = document.getElementById('uploadZone');
+
+  zone.addEventListener('dragover', e => {
+    e.preventDefault();
+    zone.classList.add('drag-over');
+  });
+
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) uploadFile(file);
+  });
+
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) uploadFile(file);
+  }
+
+  // ── Pipeline step animation ─────────────────────────────────────
+  function activateStep(n) {
+    for (let i = 1; i <= 4; i++) {
+      const el = document.getElementById(`step${i}`);
+      if (el) el.classList.toggle('active', i <= n);
+    }
+  }
+
+  // ── Upload flow ─────────────────────────────────────────────────
+  async function uploadFile(file) {
+    if (!file.name.endsWith('.pdf')) {
+      showToast('Only PDF files are supported', 'error');
+      return;
+    }
+
+    const progress = document.getElementById('uploadProgress');
+    const fill = document.getElementById('progressFill');
+    const label = document.getElementById('progressLabel');
+    const percent = document.getElementById('progressPercent');
+
+    zone.style.display = 'none';
+    progress.classList.add('visible');
+    activateStep(1);
+
+    // Simulate upload progress
+    let pct = 0;
+    const tick = setInterval(() => {
+      pct = Math.min(pct + Math.random() * 8, 90);
+      fill.style.width = pct + '%';
+      percent.textContent = Math.floor(pct) + '%';
+    }, 200);
+
+    try {
+      // Step 1: Upload
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploadRes = await fetch(`${API}/api/documents`, {
+        method: 'POST',
+        body: formData
+      });
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const { document_id } = await uploadRes.json();
+      clearInterval(tick);
+      fill.style.width = '30%';
+      percent.textContent = '30%';
+
+      // Step 2: Extract
+      activateStep(2);
+      label.textContent = 'Running AI extraction…';
+      const extractRes = await fetch(`${API}/api/extract/${document_id}`, { method: 'POST' });
+      if (!extractRes.ok) throw new Error('Extraction failed');
+      fill.style.width = '60%';
+      percent.textContent = '60%';
+
+      // Step 3: FHIR
+      activateStep(3);
+      label.textContent = 'Building FHIR bundle…';
+      try {
+        await fetch(`${API}/api/fhir/${document_id}`, { method: 'POST' });
+      } catch (_) { /* FHIR service optional for demo */ }
+      fill.style.width = '80%';
+      percent.textContent = '80%';
+
+      // Step 4: Reconcile
+      activateStep(4);
+      label.textContent = 'Running claim reconciliation…';
+      const reconRes = await fetch(`${API}/api/reconcile/${document_id}`, { method: 'POST' });
+      if (!reconRes.ok) throw new Error('Reconciliation failed');
+      const recon = await reconRes.json();
+      fill.style.width = '100%';
+      percent.textContent = '100%';
+
+      setTimeout(() => {
+        progress.classList.remove('visible');
+        zone.style.display = '';
+        activateStep(0);
+        showToast(`Processed! ₹${recon.estimated_claim_delta_inr?.toLocaleString('en-IN') ?? 0} potential recovery found`, 'success');
+        loadDocuments();
+        // Navigate to reconcile page
+        setTimeout(() => {
+          sessionStorage.setItem('currentDocId', document_id);
+          window.location.href = `reconcile.html?doc=${document_id}`;
+        }, 1200);
+      }, 600);
+
+    } catch (err) {
+      clearInterval(tick);
+      progress.classList.remove('visible');
+      zone.style.display = '';
+      activateStep(0);
+      showToast('Error: ' + err.message, 'error');
+    }
+  }
+
+  // ── Load document list ─────────────────────────────────────────
+  async function loadDocuments() {
+    try {
+      const res = await fetch(`${API}/api/documents`);
+      if (!res.ok) throw new Error();
+      const docs = await res.json();
+      renderDocuments(docs);
+      updateStats(docs);
+    } catch {
+      // If backend not running, show demo state
+      renderDocuments(DEMO_DOCS);
+      updateStats(DEMO_DOCS);
+    }
+  }
+
+  function renderDocuments(docs) {
+    const list = document.getElementById('docList');
+    const empty = document.getElementById('emptyState');
+    document.getElementById('docCount').textContent = `${docs.length} document${docs.length !== 1 ? 's' : ''}`;
+
+    if (!docs.length) {
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+
+    list.innerHTML = docs.map(doc => `
+      <div class="doc-item animate-in" onclick="openDoc('${doc.id}', '${doc.status}')">
+        <div class="doc-icon">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+        </div>
+        <div class="doc-meta">
+          <div class="doc-name">${doc.filename}</div>
+          <div class="doc-details">
+            ${doc.patient_name ? `<strong style="color:var(--text-secondary)">${doc.patient_name}</strong> · ` : ''}
+            ${doc.diagnosis_count ? `${doc.diagnosis_count} diagnoses` : ''}
+            ${doc.uploaded_at ? ` · ${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}` : ''}
+          </div>
+        </div>
+        <div class="doc-actions">
+          ${doc.claim_delta ? `<div class="doc-claim-bar">
+            <span class="doc-claim-amount">+₹${(doc.claim_delta||0).toLocaleString('en-IN')}</span>
+            <span class="badge badge-gold">missed</span>
+          </div>` : ''}
+          <span class="badge badge-dot ${statusClass(doc.status)}">${doc.status ?? 'pending'}</span>
+          <svg width="16" height="16" fill="none" stroke="var(--text-muted)" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function statusClass(s) {
+    return { complete: 'status-complete', processing: 'status-processing', failed: 'status-failed' }[s] ?? 'status-pending';
+  }
+
+  function updateStats(docs) {
+    const complete = docs.filter(d => d.status === 'complete');
+    document.getElementById('statDocs').textContent = docs.length;
+    const totalRevenue = complete.reduce((a, d) => a + (d.claim_delta || 0), 0);
+    document.getElementById('statRevenue').textContent = totalRevenue > 0 ? `₹${(totalRevenue/1000).toFixed(0)}K` : '₹0';
+    const totalMissed = complete.reduce((a, d) => a + (d.missed_count || 0), 0);
+    document.getElementById('statMissed').textContent = totalMissed;
+    const avgConf = complete.length ? complete.reduce((a, d) => a + (d.confidence || 0), 0) / complete.length : 0;
+    document.getElementById('statConf').textContent = avgConf > 0 ? (avgConf * 100).toFixed(0) + '%' : '—';
+  }
+
+  function openDoc(id, status) {
+    sessionStorage.setItem('currentDocId', id);
+    if (status === 'complete') {
+      window.location.href = `reconcile.html?doc=${id}`;
+    } else {
+      window.location.href = `review.html?doc=${id}`;
+    }
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────
+  function showToast(msg, type = 'info') {
+    const icons = {
+      success: '✓', error: '✕', info: 'ℹ', warning: '⚠'
+    };
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
+    c.appendChild(t);
+    setTimeout(() => {
+      t.classList.add('removing');
+      setTimeout(() => t.remove(), 300);
+    }, 4000);
+  }
+
+  // ── Demo data (when backend not running) ───────────────────────
+  const DEMO_DOCS = [
+    {
+      id: 'demo-001', filename: 'discharge_complex.pdf',
+      patient_name: 'Rajesh Kumar', diagnosis_count: 4,
+      status: 'complete', claim_delta: 15400, missed_count: 3,
+      confidence: 0.92, uploaded_at: new Date().toISOString()
+    },
+    {
+      id: 'demo-002', filename: 'discharge_simple.pdf',
+      patient_name: 'Priya Sharma', diagnosis_count: 2,
+      status: 'complete', claim_delta: 3800, missed_count: 1,
+      confidence: 0.88, uploaded_at: new Date().toISOString()
+    }
+  ];
+
+  // ── Init ───────────────────────────────────────────────────────
+  loadDocuments();
+</script>
+</body>
+</html>

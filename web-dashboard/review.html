@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NormClaim — Document Review</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <style>
+    body { overflow: hidden; }
+    @media (max-width: 900px) { body { overflow: auto; } }
+
+    .review-layout {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - var(--nav-h));
+    }
+
+    /* Subheader */
+    .review-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-4);
+      padding: var(--sp-4) var(--sp-8);
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      flex-shrink: 0;
+    }
+
+    .review-bar-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .review-bar-meta {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Three-column body */
+    .three-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .col-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border-subtle);
+    }
+    .col-panel:last-child { border-right: none; }
+
+    .col-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--sp-4) var(--sp-5);
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+      flex-shrink: 0;
+    }
+
+    .col-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+    }
+
+    .col-title-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent, var(--teal));
+    }
+
+    .col-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--sp-5);
+      font-size: 0.875rem;
+    }
+
+    /* Raw text column */
+    .raw-text {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Patient summary card */
+    .patient-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-md);
+      padding: var(--sp-4);
+      margin-bottom: var(--sp-5);
+    }
+
+    .patient-name {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .patient-meta {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Diagnosis rows */
+    .diagnosis-list { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+    .diag-row {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-md);
+      padding: var(--sp-4);
+      transition: border-color var(--t-fast);
+    }
+
+    .diag-row:hover { border-color: var(--border-active); }
+    .diag-row.primary { border-left: 3px solid var(--teal); }
+    .diag-row.secondary { border-left: 3px solid var(--bg-overlay); }
+
+    .diag-header {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-2);
+    }
+
+    .diag-text {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .diag-footer {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+    }
+
+    /* Medications & procedures */
+    .entity-section { margin-bottom: var(--sp-6); }
+    .entity-section-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: var(--sp-3);
+      padding-bottom: var(--sp-2);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .med-row {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      padding: var(--sp-2) 0;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 0.85rem;
+    }
+
+    .med-row:last-child { border-bottom: none; }
+    .med-name { font-weight: 500; color: var(--text-primary); flex: 1; }
+    .med-dose { font-family: var(--font-mono); font-size: 0.78rem; color: var(--green); }
+    .med-dur  { font-size: 0.75rem; color: var(--text-muted); }
+
+    /* FHIR JSON column */
+    .fhir-tree { font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.8; }
+
+    .json-line { display: block; }
+    .json-key    { color: var(--teal-bright); }
+    .json-string { color: #a8d5a2; }
+    .json-number { color: var(--gold); }
+    .json-bool   { color: var(--red-bright); }
+    .json-null   { color: var(--text-muted); font-style: italic; }
+    .json-bracket { color: var(--text-muted); }
+
+    .fhir-resource-block {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-md);
+      margin-bottom: var(--sp-3);
+      overflow: hidden;
+    }
+
+    .fhir-resource-header {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      padding: var(--sp-3) var(--sp-4);
+      background: var(--bg-overlay);
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .fhir-resource-header:hover { background: var(--teal-faint); }
+
+    .fhir-resource-type {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--teal-bright);
+      font-family: var(--font-mono);
+    }
+
+    .fhir-resource-id {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      flex: 1;
+    }
+
+    .fhir-chevron { color: var(--text-muted); transition: transform var(--t-fast); }
+    .fhir-resource-block.open .fhir-chevron { transform: rotate(90deg); }
+
+    .fhir-resource-body {
+      display: none;
+      padding: var(--sp-4);
+    }
+    .fhir-resource-block.open .fhir-resource-body { display: block; }
+
+    /* Encounter info */
+    .encounter-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-5);
+    }
+
+    .enc-field {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-sm);
+      padding: var(--sp-3);
+    }
+
+    .enc-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 2px; }
+    .enc-value { font-size: 0.875rem; font-weight: 500; color: var(--text-primary); }
+
+    /* Loading skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-overlay) 50%, var(--bg-elevated) 75%);
+      background-size: 200% 100%;
+      animation: skel 1.5s ease infinite;
+      border-radius: var(--r-sm);
+      height: 14px;
+      margin-bottom: var(--sp-3);
+    }
+    @keyframes skel { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      .three-col { grid-template-columns: 1fr; height: auto; }
+      .col-panel { border-right: none; border-bottom: 1px solid var(--border-subtle); min-height: 400px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <a href="index.html" class="nav-logo">
+    <div class="nav-logo-mark">N</div>
+    <span class="nav-logo-text">Norm<span>Claim</span></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Dashboard
+    </a>
+    <a href="review.html" class="nav-link active">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Review
+    </a>
+    <a href="reconcile.html" class="nav-link">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+      Reconcile
+    </a>
+  </div>
+  <div class="nav-spacer"></div>
+  <span class="nav-badge">ABDM v6.5</span>
+</nav>
+
+<div class="review-layout">
+  <!-- Subheader bar -->
+  <div class="review-bar">
+    <a href="index.html" class="btn btn-ghost btn-sm">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+      Back
+    </a>
+    <div class="review-bar-title" id="docTitle">Loading document…</div>
+    <span id="docStatusBadge" class="badge badge-muted">loading</span>
+    <a id="reconcileBtn" href="#" class="btn btn-primary btn-sm" style="display:none;">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01"/>
+      </svg>
+      View Claim Report
+    </a>
+  </div>
+
+  <!-- Three columns -->
+  <div class="three-col">
+
+    <!-- Col 1: Raw document text -->
+    <div class="col-panel" style="--accent: var(--text-muted);">
+      <div class="col-header">
+        <div class="col-title">
+          <div class="col-title-dot" style="background:var(--text-muted)"></div>
+          Source Document
+        </div>
+        <span id="rawCharCount" class="badge badge-muted">—</span>
+      </div>
+      <div class="col-body">
+        <div id="rawTextArea" class="raw-text">
+          <div class="skeleton" style="width:80%"></div>
+          <div class="skeleton" style="width:65%"></div>
+          <div class="skeleton" style="width:90%"></div>
+          <div class="skeleton" style="width:55%"></div>
+          <div class="skeleton" style="width:75%"></div>
+          <div class="skeleton" style="width:82%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Col 2: Extracted entities -->
+    <div class="col-panel" style="--accent: var(--teal);">
+      <div class="col-header">
+        <div class="col-title">
+          <div class="col-title-dot"></div>
+          Extracted Entities
+        </div>
+        <span id="diagCount" class="badge badge-teal">— diagnoses</span>
+      </div>
+      <div class="col-body" id="entitiesCol">
+        <!-- Patient card -->
+        <div class="patient-card" id="patientCard">
+          <div class="skeleton" style="width:60%; height:18px; margin-bottom:6px;"></div>
+          <div class="skeleton" style="width:40%"></div>
+        </div>
+
+        <!-- Encounter -->
+        <div class="encounter-grid" id="encounterGrid">
+          <div class="enc-field"><div class="skeleton"></div></div>
+          <div class="enc-field"><div class="skeleton"></div></div>
+          <div class="enc-field"><div class="skeleton"></div></div>
+          <div class="enc-field"><div class="skeleton"></div></div>
+        </div>
+
+        <!-- Diagnoses -->
+        <div class="entity-section">
+          <div class="entity-section-title">Diagnoses</div>
+          <div class="diagnosis-list" id="diagnosisList">
+            <div class="skeleton" style="height:72px; margin-bottom:0;border-radius:8px;"></div>
+          </div>
+        </div>
+
+        <!-- Medications -->
+        <div class="entity-section" id="medicationsSection">
+          <div class="entity-section-title">Medications</div>
+          <div id="medicationsList"></div>
+        </div>
+
+        <!-- Procedures -->
+        <div class="entity-section" id="proceduresSection" style="display:none;">
+          <div class="entity-section-title">Procedures</div>
+          <div id="proceduresList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Col 3: FHIR Bundle -->
+    <div class="col-panel" style="--accent: var(--gold);">
+      <div class="col-header">
+        <div class="col-title">
+          <div class="col-title-dot" style="background:var(--gold)"></div>
+          FHIR R4 Bundle
+        </div>
+        <div class="flex gap-2">
+          <span class="badge badge-gold">ABDM</span>
+          <button class="btn btn-ghost btn-sm" id="copyFhirBtn" onclick="copyFhir()">Copy</button>
+        </div>
+      </div>
+      <div class="col-body" id="fhirCol">
+        <div class="skeleton" style="height:40px; margin-bottom:8px; border-radius:8px;"></div>
+        <div class="skeleton" style="height:40px; margin-bottom:8px; border-radius:8px;"></div>
+        <div class="skeleton" style="height:40px; margin-bottom:8px; border-radius:8px;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+  const API = 'http://localhost:8000';
+  const params = new URLSearchParams(window.location.search);
+  let docId = params.get('doc') || sessionStorage.getItem('currentDocId');
+  let extractedData = null;
+  let fhirData = null;
+
+  // ── Load document ───────────────────────────────────────────────
+  async function loadDocument() {
+    if (!docId) {
+      // Load demo data
+      renderAll(DEMO_EXTRACTION, DEMO_FHIR);
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/api/extract/${docId}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      extractedData = data;
+
+      // Try FHIR
+      try {
+        const fhirRes = await fetch(`${API}/api/fhir/${docId}`);
+        if (fhirRes.ok) fhirData = await fhirRes.json();
+      } catch (_) {}
+
+      renderAll(data, fhirData);
+    } catch {
+      renderAll(DEMO_EXTRACTION, DEMO_FHIR);
+    }
+  }
+
+  function renderAll(data, fhir) {
+    document.getElementById('docTitle').textContent = data.patient?.name
+      ? `${data.patient.name} — Discharge Summary`
+      : 'Discharge Summary';
+
+    const badge = document.getElementById('docStatusBadge');
+    badge.textContent = 'complete';
+    badge.className = 'badge status-complete';
+
+    const reconcileBtn = document.getElementById('reconcileBtn');
+    reconcileBtn.style.display = '';
+    reconcileBtn.href = `reconcile.html?doc=${docId || 'demo-001'}`;
+
+    renderRawText(data.raw_text_preview);
+    renderEntities(data);
+    renderFhir(fhir || buildDemoFhir(data));
+  }
+
+  // ── Column 1: Raw text ──────────────────────────────────────────
+  function renderRawText(text) {
+    const el = document.getElementById('rawTextArea');
+    if (!text) {
+      el.innerHTML = '<span style="color:var(--text-muted); font-style:italic;">No text preview available</span>';
+      return;
+    }
+    // Highlight key medical terms
+    const highlighted = text
+      .replace(/([A-Z]\d{2}(?:\.\d+)?)/g, '<mark style="background:var(--teal-faint);color:var(--teal-bright);border-radius:3px;padding:0 3px;">$1</mark>')
+      .replace(/(DISCHARGE SUMMARY|DIAGNOSIS|MEDICATIONS?|PROCEDURES?)/gi,
+        '<mark style="background:var(--bg-overlay);color:var(--text-primary);font-weight:600;border-radius:3px;padding:0 3px;">$1</mark>');
+
+    el.innerHTML = highlighted;
+    document.getElementById('rawCharCount').textContent = `${text.length} chars`;
+  }
+
+  // ── Column 2: Entities ──────────────────────────────────────────
+  function renderEntities(data) {
+    const p = data.patient || {};
+    const e = data.encounter || {};
+
+    // Patient card
+    document.getElementById('patientCard').innerHTML = `
+      <div class="patient-name">${p.name || 'Unknown Patient'}</div>
+      <div class="patient-meta">
+        ${p.age ? `${p.age} yrs` : ''} ${p.sex ? `· ${p.sex}` : ''}
+        ${p.abha_id ? `· <span class="font-mono" style="font-size:0.75rem;color:var(--teal-bright)">ABHA: ${p.abha_id}</span>` : ''}
+      </div>
+    `;
+
+    // Encounter
+    document.getElementById('encounterGrid').innerHTML = `
+      <div class="enc-field">
+        <div class="enc-label">Admitted</div>
+        <div class="enc-value">${e.admit_date || '—'}</div>
+      </div>
+      <div class="enc-field">
+        <div class="enc-label">Discharged</div>
+        <div class="enc-value">${e.discharge_date || '—'}</div>
+      </div>
+      <div class="enc-field">
+        <div class="enc-label">Ward</div>
+        <div class="enc-value">${e.ward || '—'}</div>
+      </div>
+      <div class="enc-field">
+        <div class="enc-label">LOS</div>
+        <div class="enc-value">${e.los_days != null ? e.los_days + ' days' : '—'}</div>
+      </div>
+    `;
+
+    // Diagnoses
+    const diags = data.diagnoses || [];
+    document.getElementById('diagCount').textContent = `${diags.length} diagnoses`;
+    document.getElementById('diagnosisList').innerHTML = diags.map((d, i) => {
+      const confPct = Math.round((d.confidence || 0) * 100);
+      const confClass = confPct >= 85 ? 'high' : confPct >= 65 ? 'medium' : 'low';
+      return `
+        <div class="diag-row ${d.is_primary ? 'primary' : 'secondary'} animate-in"
+             style="animation-delay:${i * 60}ms">
+          <div class="diag-header">
+            <span class="icd-code">${d.icd10_code}</span>
+            ${d.is_primary ? '<span class="badge badge-teal">Primary</span>' : '<span class="badge badge-muted">Secondary</span>'}
+          </div>
+          <div class="diag-text">${d.text}</div>
+          <div class="diag-footer">
+            <div class="confidence-bar" style="flex:1;">
+              <div class="confidence-track">
+                <div class="confidence-fill ${confClass}" style="width:${confPct}%"></div>
+              </div>
+              <div class="confidence-value">${confPct}%</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Medications
+    const meds = data.medications || [];
+    document.getElementById('medicationsList').innerHTML = meds.map(m => `
+      <div class="med-row">
+        <div class="med-name">${m.name}</div>
+        ${m.dose ? `<div class="med-dose">${m.dose}</div>` : ''}
+        ${m.duration ? `<div class="med-dur">${m.duration}</div>` : ''}
+      </div>
+    `).join('') || '<p class="text-muted" style="font-size:0.8rem;">None recorded</p>';
+
+    // Procedures
+    const procs = data.procedures || [];
+    if (procs.length > 0) {
+      document.getElementById('proceduresSection').style.display = '';
+      document.getElementById('proceduresList').innerHTML = procs.map(p => `
+        <div class="med-row">
+          <div class="med-name">${p.text}</div>
+          ${p.date ? `<div class="med-dur">${p.date}</div>` : ''}
+        </div>
+      `).join('');
+    }
+  }
+
+  // ── Column 3: FHIR ──────────────────────────────────────────────
+  let fhirRaw = '';
+
+  function renderFhir(bundle) {
+    fhirRaw = JSON.stringify(bundle, null, 2);
+    const col = document.getElementById('fhirCol');
+
+    if (!bundle || !bundle.entry) {
+      col.innerHTML = `<div class="empty-state" style="padding:var(--sp-10) 0;">
+        <p>FHIR bundle not available. Start the Java service on :8001.</p>
+      </div>`;
+      return;
+    }
+
+    col.innerHTML = bundle.entry.map((entry, i) => {
+      const res = entry.resource || {};
+      const rtype = res.resourceType || 'Resource';
+      const rid = res.id || `resource-${i}`;
+      const json = syntaxHighlight(JSON.stringify(res, null, 2));
+      return `
+        <div class="fhir-resource-block ${i < 2 ? 'open' : ''}" id="fhir-${i}">
+          <div class="fhir-resource-header" onclick="toggleFhir(${i})">
+            <span class="fhir-resource-type">${rtype}</span>
+            <span class="fhir-resource-id">${rid}</span>
+            <svg class="fhir-chevron" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </div>
+          <div class="fhir-resource-body">
+            <pre class="fhir-tree">${json}</pre>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function toggleFhir(i) {
+    document.getElementById(`fhir-${i}`).classList.toggle('open');
+  }
+
+  function syntaxHighlight(json) {
+    return json
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+          cls = /:$/.test(match) ? 'json-key' : 'json-string';
+        } else if (/true|false/.test(match)) {
+          cls = 'json-bool';
+        } else if (/null/.test(match)) {
+          cls = 'json-null';
+        }
+        return `<span class="${cls}">${match}</span>`;
+      });
+  }
+
+  function copyFhir() {
+    navigator.clipboard.writeText(fhirRaw).then(() => showToast('FHIR JSON copied to clipboard', 'success'));
+  }
+
+  // ── Toast ───────────────────────────────────────────────────────
+  function showToast(msg, type = 'info') {
+    const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
+    c.appendChild(t);
+    setTimeout(() => { t.classList.add('removing'); setTimeout(() => t.remove(), 300); }, 3500);
+  }
+
+  // ── Demo data ────────────────────────────────────────────────────
+  const DEMO_EXTRACTION = {
+    document_id: 'demo-001',
+    patient: { name: 'Rajesh Kumar', age: 58, sex: 'Male', abha_id: '91-1234-5678-9012' },
+    encounter: { admit_date: '2024-03-12', discharge_date: '2024-03-18', ward: 'General Medicine', los_days: 6 },
+    diagnoses: [
+      { text: 'Community-acquired Pneumonia', icd10_code: 'J18.9', is_primary: true,  confidence: 0.97 },
+      { text: 'Type 2 Diabetes Mellitus',     icd10_code: 'E11.9', is_primary: false, confidence: 0.94 },
+      { text: 'Essential Hypertension',        icd10_code: 'I10',   is_primary: false, confidence: 0.96 },
+      { text: 'Chronic Kidney Disease Stg 3',  icd10_code: 'N18.3', is_primary: false, confidence: 0.89 }
+    ],
+    procedures: [],
+    medications: [
+      { name: 'Amoxicillin', dose: '500mg', duration: '7 days' },
+      { name: 'Metformin',   dose: '500mg', duration: 'Ongoing' },
+      { name: 'Amlodipine',  dose: '5mg',   duration: 'Ongoing' }
+    ],
+    billed_codes: ['J18.9'],
+    raw_text_preview: `DISCHARGE SUMMARY
+City General Hospital, Gwalior
+
+Patient: Rajesh Kumar          Age/Sex: 58M
+ABHA ID: 91-1234-5678-9012     Ward: General Medicine
+Admit Date: 12/03/2024         Discharge: 18/03/2024
+
+FINAL DIAGNOSIS:
+1. Community-acquired Pneumonia (J18.9) — PRIMARY
+2. Type 2 Diabetes Mellitus (E11.9) — COMORBIDITY
+3. Essential Hypertension (I10) — COMORBIDITY
+4. Chronic Kidney Disease Stage 3 (N18.3) — COMORBIDITY
+
+MEDICATIONS PRESCRIBED:
+- Amoxicillin 500mg TDS × 7 days
+- Metformin 500mg BD (continue)
+- Amlodipine 5mg OD (continue)
+
+CLINICAL NOTES:
+Patient admitted with high fever, cough and breathlessness.
+Chest X-ray showed consolidation in right lower lobe.
+Blood sugar poorly controlled on admission (FBS: 210 mg/dL).
+BP elevated on admission (148/92 mmHg), controlled with medication.
+eGFR: 38 mL/min/1.73m² consistent with CKD Stage 3.
+
+BILLED CODES: J18.9`
+  };
+
+  const DEMO_FHIR = {
+    resourceType: 'Bundle',
+    id: 'normclaim-bundle-demo-001',
+    type: 'document',
+    entry: [
+      {
+        resource: {
+          resourceType: 'Patient', id: 'patient-rajesh',
+          identifier: [{ system: 'https://abha.abdm.gov.in', value: '91-1234-5678-9012' }],
+          name: [{ text: 'Rajesh Kumar' }],
+          gender: 'male', birthDate: '1966-01-01'
+        }
+      },
+      {
+        resource: {
+          resourceType: 'Encounter', id: 'encounter-001',
+          status: 'finished',
+          class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: 'IMP' },
+          period: { start: '2024-03-12', end: '2024-03-18' }
+        }
+      },
+      {
+        resource: {
+          resourceType: 'Condition', id: 'cond-J18.9',
+          code: { coding: [{ system: 'http://hl7.org/fhir/sid/icd-10', code: 'J18.9', display: 'Pneumonia, unspecified' }] },
+          clinicalStatus: { coding: [{ code: 'active' }] }
+        }
+      },
+      {
+        resource: {
+          resourceType: 'Condition', id: 'cond-E11.9',
+          code: { coding: [{ system: 'http://hl7.org/fhir/sid/icd-10', code: 'E11.9', display: 'Type 2 diabetes mellitus' }] },
+          clinicalStatus: { coding: [{ code: 'active' }] }
+        }
+      },
+      {
+        resource: {
+          resourceType: 'Condition', id: 'cond-I10',
+          code: { coding: [{ system: 'http://hl7.org/fhir/sid/icd-10', code: 'I10', display: 'Essential hypertension' }] },
+          clinicalStatus: { coding: [{ code: 'active' }] }
+        }
+      },
+      {
+        resource: {
+          resourceType: 'Condition', id: 'cond-N18.3',
+          code: { coding: [{ system: 'http://hl7.org/fhir/sid/icd-10', code: 'N18.3', display: 'Chronic kidney disease, stage 3' }] },
+          clinicalStatus: { coding: [{ code: 'active' }] }
+        }
+      },
+      {
+        resource: {
+          resourceType: 'Claim', id: 'claim-001',
+          status: 'active', use: 'claim',
+          type: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/claim-type', code: 'institutional' }] },
+          diagnosis: [
+            { sequence: 1, diagnosisCodeableConcept: { coding: [{ code: 'J18.9' }] } },
+            { sequence: 2, diagnosisCodeableConcept: { coding: [{ code: 'E11.9' }] } },
+            { sequence: 3, diagnosisCodeableConcept: { coding: [{ code: 'I10' }] } },
+            { sequence: 4, diagnosisCodeableConcept: { coding: [{ code: 'N18.3' }] } }
+          ]
+        }
+      }
+    ]
+  };
+
+  function buildDemoFhir(data) { return DEMO_FHIR; }
+
+  loadDocument();
+</script>
+</body>
+</html>

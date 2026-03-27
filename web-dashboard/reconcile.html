@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NormClaim — Claim Reconciliation Report</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <style>
+    /* ── Reconcile-specific styles ─────────────────────────────── */
+    .recon-layout {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: var(--sp-8) var(--sp-8) var(--sp-16);
+    }
+
+    /* Back bar */
+    .recon-topbar {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-4);
+      margin-bottom: var(--sp-8);
+    }
+
+    /* Patient summary strip */
+    .patient-strip {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-6);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-lg);
+      padding: var(--sp-5) var(--sp-6);
+      margin-bottom: var(--sp-8);
+    }
+
+    .patient-avatar {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, var(--teal-faint), var(--bg-overlay));
+      border: 1px solid var(--border-active);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      color: var(--teal-bright);
+      flex-shrink: 0;
+    }
+
+    .patient-info { flex: 1; }
+    .patient-info-name {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+    .patient-info-meta { font-size: 0.8rem; color: var(--text-muted); }
+
+    .strip-divider {
+      width: 1px; height: 36px;
+      background: var(--border-subtle);
+    }
+
+    .strip-stat { text-align: center; }
+    .strip-stat-val {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+    .strip-stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+    /* ICD-10 table */
+    .recon-table-wrap {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      margin-bottom: var(--sp-8);
+    }
+
+    .recon-table-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--sp-5) var(--sp-6);
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+    }
+
+    .recon-table-header h3 { margin: 0; }
+
+    table.recon-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    table.recon-table thead th {
+      background: var(--bg-elevated);
+      padding: var(--sp-3) var(--sp-6);
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    table.recon-table thead th:last-child { text-align: right; }
+
+    table.recon-table tbody tr {
+      border-bottom: 1px solid var(--border-subtle);
+      transition: background var(--t-fast);
+    }
+
+    table.recon-table tbody tr:last-child { border-bottom: none; }
+
+    table.recon-table tbody td {
+      padding: var(--sp-4) var(--sp-6);
+      vertical-align: middle;
+    }
+
+    /* Row coloring */
+    tr.row-matched { background: rgba(46,201,138,0.04); }
+    tr.row-matched:hover { background: rgba(46,201,138,0.08); }
+    tr.row-missed  { background: rgba(224,92,75,0.05); }
+    tr.row-missed:hover  { background: rgba(224,92,75,0.1); }
+    tr.row-extra   { background: rgba(245,166,35,0.04); }
+    tr.row-extra:hover   { background: rgba(245,166,35,0.08); }
+
+    /* Status indicator column */
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .matched .status-dot { background: var(--green); }
+    .missed  .status-dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .extra   .status-dot { background: var(--gold); }
+
+    .matched { color: var(--green); }
+    .missed  { color: var(--red-bright); }
+    .extra   { color: var(--gold); }
+
+    /* Value column */
+    .value-cell {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .value-cell.missed-val { color: var(--red-bright); }
+    .value-cell.matched-val { color: var(--green); }
+    .value-cell.muted-val  { color: var(--text-muted); }
+
+    /* Description */
+    .diag-desc {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    /* ── Delta callout ─────────────────────────────────────────── */
+    .delta-section {
+      position: relative;
+    }
+
+    .delta-callout-full {
+      background: linear-gradient(135deg,
+        rgba(245,166,35,0.08) 0%,
+        rgba(245,166,35,0.03) 50%,
+        rgba(224,92,75,0.05) 100%
+      );
+      border: 1px solid rgba(245,166,35,0.4);
+      border-radius: var(--r-xl);
+      padding: var(--sp-10) var(--sp-12);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: var(--sp-8);
+    }
+
+    .delta-callout-full::before {
+      content: '';
+      position: absolute;
+      top: -60%; left: -20%;
+      width: 140%; height: 200%;
+      background: radial-gradient(circle at 50% 60%, rgba(245,166,35,0.07), transparent 55%);
+      pointer-events: none;
+    }
+
+    .delta-callout-full .scan-line { opacity: 0.25; }
+
+    .delta-eyebrow {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--gold);
+      margin-bottom: var(--sp-4);
+    }
+
+    .delta-rupee {
+      font-family: var(--font-display);
+      font-size: clamp(3rem, 7vw, 5.5rem);
+      color: var(--gold);
+      line-height: 1;
+      text-shadow: 0 0 60px rgba(245,166,35,0.35);
+      margin-bottom: var(--sp-4);
+      display: block;
+    }
+
+    .delta-description {
+      font-size: 1rem;
+      color: var(--text-secondary);
+      max-width: 500px;
+      margin: 0 auto var(--sp-6);
+      line-height: 1.6;
+    }
+
+    .delta-description strong { color: var(--gold); }
+
+    .delta-badges {
+      display: flex;
+      justify-content: center;
+      gap: var(--sp-3);
+      flex-wrap: wrap;
+    }
+
+    /* Breakdown strip inside delta box */
+    .delta-breakdown {
+      display: flex;
+      justify-content: center;
+      gap: var(--sp-8);
+      margin-bottom: var(--sp-6);
+      padding: var(--sp-5) 0;
+      border-top: 1px solid rgba(245,166,35,0.15);
+      border-bottom: 1px solid rgba(245,166,35,0.15);
+    }
+
+    .delta-item { text-align: center; }
+    .delta-item-val {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .delta-item-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+
+    /* Confidence gauge */
+    .confidence-section {
+      margin-bottom: var(--sp-8);
+    }
+
+    .conf-gauge-wrap {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-lg);
+      padding: var(--sp-6);
+      display: flex;
+      align-items: center;
+      gap: var(--sp-6);
+    }
+
+    .conf-gauge {
+      position: relative;
+      width: 80px; height: 80px;
+      flex-shrink: 0;
+    }
+
+    .conf-gauge svg { transform: rotate(-90deg); }
+
+    .conf-gauge-val {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      color: var(--teal-bright);
+    }
+
+    .conf-detail { flex: 1; }
+    .conf-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: var(--sp-2);
+    }
+    .conf-sub { font-size: 0.85rem; color: var(--text-muted); }
+
+    /* Action buttons row */
+    .action-row {
+      display: flex;
+      gap: var(--sp-4);
+      justify-content: center;
+      margin-top: var(--sp-8);
+    }
+
+    /* Number counter animation */
+    .counting { transition: all 0.05s; }
+
+    @media (max-width: 768px) {
+      .recon-layout { padding: var(--sp-5) var(--sp-4) var(--sp-12); }
+      .patient-strip { flex-wrap: wrap; gap: var(--sp-4); }
+      .strip-divider { display: none; }
+      .delta-callout-full { padding: var(--sp-6) var(--sp-5); }
+      .delta-breakdown { gap: var(--sp-5); }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">
+    <div class="nav-logo-mark">N</div>
+    <span class="nav-logo-text">Norm<span>Claim</span></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Dashboard
+    </a>
+    <a href="review.html" class="nav-link">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Review
+    </a>
+    <a href="reconcile.html" class="nav-link active">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+      Reconcile
+    </a>
+  </div>
+  <div class="nav-spacer"></div>
+  <span class="nav-badge">ABDM v6.5</span>
+</nav>
+
+<main class="recon-layout">
+
+  <!-- Top bar -->
+  <div class="recon-topbar animate-in">
+    <a href="index.html" class="btn btn-ghost btn-sm">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+      All Documents
+    </a>
+    <div style="flex:1; font-family:var(--font-display); font-size:1.2rem; color:var(--text-secondary);">
+      Claim Reconciliation Report
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="window.print()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+      </svg>
+      Print
+    </button>
+    <a id="reviewLink" href="review.html" class="btn btn-ghost btn-sm">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+      </svg>
+      View Entities
+    </a>
+  </div>
+
+  <!-- Patient strip -->
+  <div class="patient-strip animate-in-delay-1" id="patientStrip">
+    <div class="patient-avatar" id="patientAvatar">R</div>
+    <div class="patient-info">
+      <div class="patient-info-name" id="patientName">Loading…</div>
+      <div class="patient-info-meta" id="patientMeta">—</div>
+    </div>
+    <div class="strip-divider"></div>
+    <div class="strip-stat">
+      <div class="strip-stat-val" id="stripBilled">—</div>
+      <div class="strip-stat-label">Billed codes</div>
+    </div>
+    <div class="strip-divider"></div>
+    <div class="strip-stat">
+      <div class="strip-stat-val" id="stripExtracted">—</div>
+      <div class="strip-stat-label">Extracted codes</div>
+    </div>
+    <div class="strip-divider"></div>
+    <div class="strip-stat">
+      <div class="strip-stat-val text-red" id="stripMissed">—</div>
+      <div class="strip-stat-label">Missed diagnoses</div>
+    </div>
+  </div>
+
+  <!-- 4 Stat cards -->
+  <div class="stats-grid animate-in-delay-2" style="grid-template-columns: repeat(4, 1fr); margin-bottom: var(--sp-8);">
+    <div class="stat-card green">
+      <div class="stat-label">Matched</div>
+      <div class="stat-value green" id="statMatched">—</div>
+      <div class="stat-sub">Correctly billed</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Missed</div>
+      <div class="stat-value red" id="statMissed">—</div>
+      <div class="stat-sub">Not on claim</div>
+    </div>
+    <div class="stat-card gold">
+      <div class="stat-label">Extra</div>
+      <div class="stat-value gold" id="statExtra">—</div>
+      <div class="stat-sub">Billed not found</div>
+    </div>
+    <div class="stat-card teal">
+      <div class="stat-label">Confidence</div>
+      <div class="stat-value teal" id="statConf">—</div>
+      <div class="stat-sub">AI certainty</div>
+    </div>
+  </div>
+
+  <!-- ICD-10 Reconciliation Table -->
+  <div class="recon-table-wrap animate-in-delay-3">
+    <div class="recon-table-header">
+      <h3>ICD-10 Code Analysis</h3>
+      <div class="flex gap-2">
+        <span class="badge badge-green badge-dot">matched</span>
+        <span class="badge badge-red badge-dot">missed</span>
+        <span class="badge badge-gold badge-dot">extra</span>
+      </div>
+    </div>
+    <table class="recon-table">
+      <thead>
+        <tr>
+          <th style="width:110px">ICD-10 Code</th>
+          <th>Description</th>
+          <th style="width:120px">Source</th>
+          <th style="width:100px">Status</th>
+          <th style="width:130px">Est. Value</th>
+        </tr>
+      </thead>
+      <tbody id="reconTableBody">
+        <tr>
+          <td colspan="5" style="text-align:center; padding:var(--sp-10); color:var(--text-muted);">
+            <div class="spinner"></div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ₹ Delta Callout Box — THE DEMO PUNCHLINE -->
+  <div class="delta-callout-full animate-in-delay-4" id="deltaBox">
+    <div class="scan-line"></div>
+
+    <div class="delta-eyebrow">⚠ Revenue Leakage Detected</div>
+
+    <span class="delta-rupee" id="deltaAmount">₹0</span>
+
+    <!-- Breakdown -->
+    <div class="delta-breakdown" id="deltaBreakdown">
+      <div class="delta-item">
+        <div class="delta-item-val text-red" id="dbMissedCount">0</div>
+        <div class="delta-item-label">Missed diagnoses</div>
+      </div>
+      <div class="delta-item">
+        <div class="delta-item-val text-gold" id="dbBaseVal">₹0</div>
+        <div class="delta-item-label">DRG base value</div>
+      </div>
+      <div class="delta-item">
+        <div class="delta-item-val text-teal" id="dbSpecBonus">₹0</div>
+        <div class="delta-item-label">Specificity bonus</div>
+      </div>
+    </div>
+
+    <p class="delta-description">
+      This hospital's billing team submitted only <strong id="dbBilledCodes">1 code</strong> for this discharge.
+      NormClaim found <strong id="dbMissedDesc">3 additional diagnoses</strong> that qualify for AB-PMJAY claims.
+      Estimated recoverable revenue: <strong id="dbDeltaInline">₹0</strong>.
+    </p>
+
+    <div class="delta-badges">
+      <span class="badge badge-gold">AB-PMJAY DRG approximation</span>
+      <span class="badge badge-muted">ICD-10 validated</span>
+      <span class="badge badge-muted">FHIR R4 ready</span>
+      <span class="badge badge-teal">ABDM compliant</span>
+    </div>
+  </div>
+
+  <!-- Confidence gauge -->
+  <div class="conf-gauge-wrap animate-in-delay-4">
+    <div class="conf-gauge">
+      <svg width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="32" fill="none" stroke="var(--bg-overlay)" stroke-width="6"/>
+        <circle cx="40" cy="40" r="32" fill="none" stroke="var(--teal)"
+          stroke-width="6" stroke-linecap="round"
+          stroke-dasharray="201"
+          stroke-dashoffset="201"
+          id="confCircle"
+          style="transition: stroke-dashoffset 1.2s ease;"/>
+      </svg>
+      <div class="conf-gauge-val" id="confGaugeVal">—</div>
+    </div>
+    <div class="conf-detail">
+      <div class="conf-title">AI Extraction Confidence</div>
+      <div class="conf-sub">
+        Gemini 1.5 Flash confidence across all extracted ICD-10 codes.
+        Codes below 70% are flagged for clinical review before submission.
+      </div>
+    </div>
+    <div style="flex-shrink:0; text-align:right;">
+      <a id="reviewLinkBtn" href="review.html" class="btn btn-primary">
+        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+        </svg>
+        Review Entities &amp; FHIR
+      </a>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="action-row">
+    <button class="btn btn-ghost" onclick="window.location.href='index.html'">
+      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18"/>
+      </svg>
+      Upload Another
+    </button>
+    <button class="btn btn-gold btn-lg" onclick="exportReport()">
+      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+      </svg>
+      Export Report
+    </button>
+  </div>
+
+</main>
+
+<div id="toast-container"></div>
+
+<script>
+  const API = 'http://localhost:8000';
+  const params = new URLSearchParams(window.location.search);
+  const docId = params.get('doc') || sessionStorage.getItem('currentDocId') || 'demo-001';
+
+  // ── Load reconciliation data ─────────────────────────────────────
+  async function loadReconciliation() {
+    try {
+      const res = await fetch(`${API}/api/reconcile/${docId}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      render(data);
+    } catch {
+      render(DEMO_REPORT);
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────
+  function render(report) {
+    // Links
+    document.getElementById('reviewLink').href = `review.html?doc=${docId}`;
+    document.getElementById('reviewLinkBtn').href = `review.html?doc=${docId}`;
+
+    // Patient / encounter strip (use extraction if available separately)
+    document.getElementById('patientName').textContent = report.patient_name || 'Patient';
+    document.getElementById('patientMeta').textContent =
+      [report.patient_age && `${report.patient_age} yrs`, report.ward, report.discharge_date]
+        .filter(Boolean).join(' · ') || 'Discharge summary';
+
+    const initial = (report.patient_name || 'P')[0].toUpperCase();
+    document.getElementById('patientAvatar').textContent = initial;
+
+    document.getElementById('stripBilled').textContent    = report.total_billed_codes ?? '—';
+    document.getElementById('stripExtracted').textContent = report.total_extracted_codes ?? '—';
+    document.getElementById('stripMissed').textContent    = report.missed?.length ?? '—';
+
+    // Stat cards
+    document.getElementById('statMatched').textContent = report.matched?.length ?? 0;
+    document.getElementById('statMissed').textContent  = report.missed?.length ?? 0;
+    document.getElementById('statExtra').textContent   = report.extra?.length ?? 0;
+    const confPct = Math.round((report.confidence || 0) * 100);
+    document.getElementById('statConf').textContent    = confPct + '%';
+
+    // Table
+    const allItems = [
+      ...(report.matched || []),
+      ...(report.missed  || []),
+      ...(report.extra   || [])
+    ];
+    renderTable(allItems);
+
+    // Delta callout
+    renderDelta(report);
+
+    // Confidence gauge
+    const circumference = 201;
+    const offset = circumference * (1 - (report.confidence || 0));
+    setTimeout(() => {
+      document.getElementById('confCircle').style.strokeDashoffset = offset;
+      document.getElementById('confGaugeVal').textContent = confPct + '%';
+    }, 400);
+  }
+
+  function renderTable(items) {
+    const tbody = document.getElementById('reconTableBody');
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:var(--sp-8); color:var(--text-muted);">No data available</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = items.map((item, i) => {
+      const statusInfo = {
+        matched: { cls: 'row-matched', dotCls: 'matched', label: '✓ Matched' },
+        missed:  { cls: 'row-missed',  dotCls: 'missed',  label: '✕ Missed'  },
+        extra:   { cls: 'row-extra',   dotCls: 'extra',   label: '+ Extra'   }
+      }[item.status] || { cls: '', dotCls: 'muted', label: item.status };
+
+      const source = item.status === 'extra' ? 'Bill only' :
+                     item.status === 'matched' ? 'Bill + AI' : 'AI only';
+
+      const valDisplay = item.estimated_value_inr
+        ? `<span class="value-cell ${item.status === 'missed' ? 'missed-val' : item.status === 'matched' ? 'matched-val' : 'muted-val'}">₹${item.estimated_value_inr.toLocaleString('en-IN')}</span>`
+        : `<span class="value-cell muted-val">—</span>`;
+
+      const icdCls = item.status === 'missed' ? 'missed' : item.status === 'extra' ? 'extra' : '';
+
+      return `
+        <tr class="${statusInfo.cls}" style="animation: fade-in 0.3s ${i * 50}ms both;">
+          <td><span class="icd-code ${icdCls}">${item.icd10_code}</span></td>
+          <td class="diag-desc">${item.description || '—'}</td>
+          <td><span class="badge badge-muted">${source}</span></td>
+          <td>
+            <span class="status-indicator ${statusInfo.dotCls}">
+              <span class="status-dot"></span>
+              ${statusInfo.label}
+            </span>
+          </td>
+          <td>${valDisplay}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderDelta(report) {
+    const delta = report.estimated_claim_delta_inr || 0;
+    const missed = report.missed || [];
+    const billed = report.total_billed_codes || 1;
+
+    // Animate count-up
+    animateCountUp('deltaAmount', delta, v => `₹${Math.floor(v).toLocaleString('en-IN')}`);
+
+    document.getElementById('dbMissedCount').textContent = missed.length;
+    const baseVal = missed.reduce((sum, m) => sum + (m.estimated_value_inr || 0), 0);
+    const specBonus = missed.reduce((sum, m) => {
+      const code = (m.icd10_code || '').replace('.', '');
+      return sum + code.length * 150;
+    }, 0);
+
+    document.getElementById('dbBaseVal').textContent  = `₹${(baseVal - specBonus).toLocaleString('en-IN')}`;
+    document.getElementById('dbSpecBonus').textContent = `+₹${specBonus.toLocaleString('en-IN')}`;
+
+    document.getElementById('dbBilledCodes').textContent =
+      `${billed} code${billed !== 1 ? 's' : ''}`;
+    document.getElementById('dbMissedDesc').textContent =
+      `${missed.length} additional diagnosis${missed.length !== 1 ? 'es' : ''}`;
+    document.getElementById('dbDeltaInline').textContent = `₹${delta.toLocaleString('en-IN')}`;
+  }
+
+  // ── Animated counter ──────────────────────────────────────────────
+  function animateCountUp(id, target, formatter) {
+    const el = document.getElementById(id);
+    const duration = 1400;
+    const start = performance.now();
+    function frame(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3); // ease out cubic
+      el.textContent = formatter(ease * target);
+      if (t < 1) requestAnimationFrame(frame);
+      else el.textContent = formatter(target);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ── Export ────────────────────────────────────────────────────────
+  function exportReport() {
+    const data = {
+      generated: new Date().toISOString(),
+      document_id: docId,
+      note: 'NormClaim reconciliation report — see reconcile.html for full data'
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `normclaim-report-${docId}.json`;
+    a.click();
+    showToast('Report exported', 'success');
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────
+  function showToast(msg, type = 'info') {
+    const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
+    c.appendChild(t);
+    setTimeout(() => { t.classList.add('removing'); setTimeout(() => t.remove(), 300); }, 4000);
+  }
+
+  // ── Demo data ─────────────────────────────────────────────────────
+  const DEMO_REPORT = {
+    document_id: 'demo-001',
+    patient_name: 'Rajesh Kumar',
+    patient_age: 58,
+    ward: 'General Medicine',
+    discharge_date: '18/03/2024',
+    total_billed_codes: 1,
+    total_extracted_codes: 4,
+    confidence: 0.92,
+    estimated_claim_delta_inr: 15400,
+    matched: [
+      { icd10_code: 'J18.9', description: 'Pneumonia, unspecified organism', status: 'matched', estimated_value_inr: 4700 }
+    ],
+    missed: [
+      { icd10_code: 'E11.9', description: 'Type 2 diabetes mellitus without complications', status: 'missed', estimated_value_inr: 5050 },
+      { icd10_code: 'I10',   description: 'Essential (primary) hypertension',               status: 'missed', estimated_value_inr: 4000 },
+      { icd10_code: 'N18.3', description: 'Chronic kidney disease, stage 3',                status: 'missed', estimated_value_inr: 6350 }
+    ],
+    extra: []
+  };
+
+  loadReconciliation();
+</script>
+</body>
+</html>
