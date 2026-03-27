@@ -188,3 +188,97 @@ def extract_from_document(file_bytes: bytes, document_id: str) -> ExtractionResu
         billed_codes=data.get("billed_codes", []),
         raw_text_preview=raw_text[:500] if raw_text else "[scanned image]"
     )
+
+
+"""
+NormClaim — Gemini Extractor
+Handles semantic extraction using Gemini and post-processing overrides.
+"""
+
+import json
+import time
+import re
+from typing import Dict, List
+from backend.services.nlp_preprocessor import preprocess
+from backend.data.drug_map import drug_map
+import google.generativeai as palm
+
+# Load Gemini API key
+import os
+palm.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+# Constants
+GEMINI_SYSTEM_PROMPT = """
+You are a clinical NLP assistant. Your task is to extract structured clinical data from pre-processed text.
+Trust the negated_spans list provided. For any diagnosis whose text matches a span in negated_spans, set negated=true.
+Use the following drug brand-to-generic mapping as a reference:
+
+""" + json.dumps(drug_map, indent=2) + """
+
+Output strictly in JSON format matching this schema:
+{
+  "diagnoses": [
+    {"text": "", "icd10_code": "", "negated": false, "confidence": 0.0}
+  ],
+  "medications": [
+    {"brand_name": "", "generic_name": "", "dose": "", "route": "", "frequency": "", "duration": ""}
+  ]
+}
+"""
+
+def build_prompt(spacy_result: Dict) -> str:
+    """Construct the full prompt for Gemini."""
+    input_data = {
+        "expanded_text": spacy_result["expanded_text"],
+        "section_map": spacy_result["section_map"],
+        "negated_spans": spacy_result["negated_spans"]
+    }
+    return GEMINI_SYSTEM_PROMPT + "\n\nInput:\n" + json.dumps(input_data, indent=2)
+
+def parse_gemini_response(raw: str) -> Dict:
+    """Parse the raw Gemini response into a dictionary."""
+    try:
+        raw_json = re.sub(r"```json|```", "", raw).strip()
+        return json.loads(raw_json)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse Gemini response: {raw}") from e
+
+def apply_negation_override(result: Dict, negated_spans: List[str]) -> Dict:
+    """Override negation based on spaCy's negated spans."""
+    for diagnosis in result.get("diagnoses", []):
+        if any(span.lower() in diagnosis["text"].lower() for span in negated_spans):
+            diagnosis["negated"] = True
+    return result
+
+def call_gemini(prompt: str) -> Dict:
+    """Call the Gemini API with retry logic."""
+    retries = 3
+    for attempt in range(retries):
+        try:
+            response = palm.chat(messages=prompt, model="gemini-1.5-flash", temperature=0.1, max_output_tokens=4096)
+            return parse_gemini_response(response.last)
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+            else:
+                raise RuntimeError("Gemini API call failed after retries") from e
+
+def extract(raw_text: str, document_id: str, use_cache: bool = False) -> Dict:
+    """Run the full extraction pipeline."""
+    if use_cache:
+        with open("test-data/cached_extraction.json", "r") as cache_file:
+            return json.load(cache_file)
+
+    spacy_result = preprocess(raw_text)
+    prompt = build_prompt(spacy_result)
+    gemini_raw = call_gemini(prompt)
+    gemini_result = apply_negation_override(gemini_raw, spacy_result["negated_spans"])
+
+    return {
+        "document_id": document_id,
+        "raw_text_preview": raw_text[:500],
+        "detected_script": spacy_result["detected_script"],
+        "section_map": spacy_result["section_map"],
+        "negated_spans": spacy_result["negated_spans"],
+        **gemini_result
+    }
