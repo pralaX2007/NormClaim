@@ -6,8 +6,12 @@ __pycache__/
 venv/
 env/
 
-# IDE
-.vscode/
+# IDE — track shared VS Code config, ignore personal settings
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 *.iml
 .DS_Store
