@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "GitHub.copilot",
+    "GitHub.copilot-chat",
+    "ms-python.python",
+    "ms-python.pylint",
+    "ms-python.black-formatter",
+    "redhat.java",
+    "vscjava.vscode-java-pack",
+    "humao.rest-client"
+  ]
+}
